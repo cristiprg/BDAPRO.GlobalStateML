@@ -14,6 +14,7 @@
         <!-- Scala -->
         <scala.version>2.10.5</scala.version>
         <scala.tools.version>2.10</scala.tools.version>
+        <scalatest.version>2.2.6</scalatest.version>
     </properties>
 
     <dependencies>
@@ -45,6 +46,13 @@
         <dependency>
             <groupId>org.peelframework</groupId>
             <artifactId>peel-extensions</artifactId>
+        </dependency>
+
+        <!-- Scalactic -->
+        <dependency>
+            <groupId>org.scalactic</groupId>
+            <artifactId>scalactic_${scala.tools.version}</artifactId>
+            <version>${scalatest.version}</version><!-- use scalatest version -->
         </dependency>
     </dependencies>
 
