@@ -43,7 +43,7 @@
         <!-- Flink -->
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-clients_2.10</artifactId>
+            <artifactId>flink-clients_${scala.tools.version}</artifactId>
             <version>${flink.version}</version>
             <scope>provided</scope>
         </dependency>
@@ -55,13 +55,13 @@
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-scala_2.10</artifactId>
+            <artifactId>flink-scala_${scala.tools.version}</artifactId>
             <version>${flink.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-gelly-scala_2.10</artifactId>
+            <artifactId>flink-gelly-scala_${scala.tools.version}</artifactId>
             <version>${flink.version}</version>
         </dependency>
     </dependencies>
@@ -130,7 +130,7 @@
                 <!-- Flink -->
                 <dependency>
                     <groupId>org.apache.flink</groupId>
-                    <artifactId>flink-clients_2.10</artifactId>
+                    <artifactId>flink-clients_${scala.tools.version}</artifactId>
                     <version>${flink.version}</version>
                     <scope>compile</scope>
                 </dependency>
@@ -142,13 +142,13 @@
                 </dependency>
                 <dependency>
                     <groupId>org.apache.flink</groupId>
-                    <artifactId>flink-scala_2.10</artifactId>
+                    <artifactId>flink-scala_${scala.tools.version}</artifactId>
                     <version>${flink.version}</version>
                     <scope>compile</scope>
                 </dependency>
                 <dependency>
                     <groupId>org.apache.flink</groupId>
-                    <artifactId>flink-gelly-scala_2.10</artifactId>
+                    <artifactId>flink-gelly-scala_${scala.tools.version}</artifactId>
                     <version>${flink.version}</version>
                 </dependency>
             </dependencies>
