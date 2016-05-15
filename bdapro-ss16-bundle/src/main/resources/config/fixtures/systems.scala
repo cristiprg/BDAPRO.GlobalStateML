@@ -23,9 +23,9 @@ class systems extends ApplicationContextAware {
   // Systems
   // ---------------------------------------------------
 
-  @Bean(name = Array("flink-0.9.0"))
-  def `flink-0.9.0`: Flink = new Flink(
-    version      = "0.9.0",
+  @Bean(name = Array("flink-1.0.0"))
+  def `flink-1.0.0`: Flink = new Flink(
+    version      = "1.0.0",
     configKey    = "flink",
     lifespan     = Lifespan.EXPERIMENT,
     dependencies = Set(ctx.getBean("hdfs-2.7.1", classOf[HDFS2])),
