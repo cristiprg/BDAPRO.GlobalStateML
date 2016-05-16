@@ -73,18 +73,31 @@ abstract class MergeTask extends Command {
 
     val status = for {
       _ <- {
-        logger.info(s"Preparing local branch '$remUsr-$taskBranch' based on $basCmt")
+        logger.info(s"Creating branch warmup-solutions (or rebasing it to master if it exists)")
 
-        val ret = shell !
+        val ret1 = shell !
           s"""
              |cd $locSrc;
-             |git checkout -q master;
+             |git checkout -q master
+             |git checkout -q -b warmup-solutions;
+             |git checkout -q warmup-solutions;
+             |git rebase master
+           """.stripMargin
+
+        if (ret1 == 0) pass
+        else fail(s"Problem when creating or rebasing branch warmup-solutions")
+
+        logger.info(s"Preparing local branch '$remUsr-$taskBranch' based on $basCmt")
+
+        val ret2 = shell !
+          s"""
+             |cd $locSrc;
              |git branch -D $remUsr-$taskBranch;
              |git checkout -b $remUsr-$taskBranch;
              |git reset --hard $basCmt;
               """.stripMargin
 
-        if (ret == 0) pass
+        if (ret2 == 0) pass
         else fail(s"Cannot prepare local branch '$remUsr-$taskBranch'")
       }
       _ <- {
@@ -105,7 +118,7 @@ abstract class MergeTask extends Command {
         val ret = shell !!
           s"""
              |cd $locSrc;
-             |git checkout -q master;
+             |git checkout -q warmup-solutions;
              |git log -n2 --oneline $remUsr-$taskBranch
           """.stripMargin
 
@@ -143,7 +156,7 @@ abstract class MergeTask extends Command {
         val ret = shell !
           s"""
              |cd $locSrc;
-             |git checkout -q master;
+             |git checkout -q warmup-solutions;
              |git cherry-pick $remUsr-$taskBranch
           """.stripMargin
 
