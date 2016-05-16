@@ -31,7 +31,7 @@ abstract class MergeTask extends Command {
     "bdapro-ss16-flink-jobs",
     "src", "main",
     "scala", "de", "tu_berlin", "dima", "bdapro",
-    "flink", taskBranch, user, s"${taskName.replaceAll("\\W", "")}.scala"
+    "flink", taskBranch, toLowerCaseAndUnderscore(user), s"${taskName.replaceAll("\\W", "")}.scala"
   ).toString
 
   def commitMsg(user: String): String
@@ -158,5 +158,9 @@ abstract class MergeTask extends Command {
       case Bad(Error(msg)) =>
         logger.error(s"Error while merging: $msg".red)
     }
+  }
+
+  def toLowerCaseAndUnderscore(s: String): String = {
+    s.toLowerCase.replace('-','_')
   }
 }
