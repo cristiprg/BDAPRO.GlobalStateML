@@ -63,6 +63,7 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-gelly-scala_${scala.tools.version}</artifactId>
             <version>${flink.version}</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
@@ -150,6 +151,7 @@
                     <groupId>org.apache.flink</groupId>
                     <artifactId>flink-gelly-scala_${scala.tools.version}</artifactId>
                     <version>${flink.version}</version>
+                    <scope>compile</scope>
                 </dependency>
             </dependencies>
         </profile>
