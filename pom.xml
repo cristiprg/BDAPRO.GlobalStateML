@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>de.tu_berlin.dima</groupId>
-    <artifactId>bdapro-ss16</artifactId>
+    <artifactId>bdapro-ws1617</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
@@ -35,27 +35,27 @@
             <!-- bundle jars -->
             <dependency>
                 <groupId>${project.groupId}</groupId>
-                <artifactId>bdapro-ss16-bundle</artifactId>
+                <artifactId>bdapro-ws1617-bundle</artifactId>
                 <version>1.0-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>${project.groupId}</groupId>
-                <artifactId>bdapro-ss16-peelextensions</artifactId>
+                <artifactId>bdapro-ws1617-peelextensions</artifactId>
                 <version>1.0-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>${project.groupId}</groupId>
-                <artifactId>bdapro-ss16-datagens</artifactId>
+                <artifactId>bdapro-ws1617-datagens</artifactId>
                 <version>1.0-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>${project.groupId}</groupId>
-                <artifactId>bdapro-ss16-flink-jobs</artifactId>
+                <artifactId>bdapro-ws1617-flink-jobs</artifactId>
                 <version>1.0-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>${project.groupId}</groupId>
-                <artifactId>bdapro-ss16-spark-jobs</artifactId>
+                <artifactId>bdapro-ws1617-spark-jobs</artifactId>
                 <version>1.0-SNAPSHOT</version>
             </dependency>
 
@@ -172,10 +172,10 @@
     </build>
 
   <modules>
-    <module>bdapro-ss16-bundle</module>
-    <module>bdapro-ss16-peelextensions</module>
-    <module>bdapro-ss16-datagens</module>
-    <module>bdapro-ss16-flink-jobs</module>
-    <module>bdapro-ss16-spark-jobs</module>
+    <module>bdapro-ws1617-bundle</module>
+    <module>bdapro-ws1617-peelextensions</module>
+    <module>bdapro-ws1617-datagens</module>
+    <module>bdapro-ws1617-flink-jobs</module>
+    <module>bdapro-ws1617-spark-jobs</module>
   </modules>
 </project>
