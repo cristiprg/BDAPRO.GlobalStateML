@@ -21,7 +21,8 @@ import org.springframework.context.{ApplicationContext, ApplicationContextAware}
   classOf[org.peelframework.extensions],   // custom system beans
   classOf[config.fixtures.systems],        // custom system beans
   classOf[config.fixtures.wordcount],      // wordcount experiment beans
-  classOf[config.fixtures.oddsemordnilaps]
+  classOf[config.fixtures.oddsemordnilaps],
+  classOf[config.fixtures.palindrome]
 ))
 class experiments extends ApplicationContextAware {
 
