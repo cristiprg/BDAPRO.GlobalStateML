@@ -106,7 +106,7 @@ abstract class MergeTask extends Command {
         val ret = shell !
           s"""
              |cd $locSrc;
-             |git pull --ff-only git@github.com:$remUsr/BDAPRO.SS16.git $taskBranch;
+             |git pull --ff-only git@github.com:$remUsr/BDAPRO.WS1617.git $taskBranch;
               """.stripMargin
 
         if (ret == 0) pass
