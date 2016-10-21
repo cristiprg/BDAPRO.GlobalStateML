@@ -25,16 +25,19 @@
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
             <version>${scala.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-compiler</artifactId>
             <version>${scala.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-reflect</artifactId>
             <version>${scala.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Flink -->
@@ -42,21 +45,25 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-clients_${scala.tools.version}</artifactId>
             <version>${flink.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-java</artifactId>
             <version>${flink.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-scala_${scala.tools.version}</artifactId>
             <version>${flink.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-gelly-scala_${scala.tools.version}</artifactId>
             <version>${flink.version}</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
