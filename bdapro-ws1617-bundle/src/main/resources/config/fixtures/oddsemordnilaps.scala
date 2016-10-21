@@ -56,14 +56,6 @@ class oddsemordnilaps extends ApplicationContextAware {
 
   @Bean(name = Array("oddsemordnilaps"))
   def oddsemordnilaps: ExperimentSuite = {
-    val forks = ctx.getClassLoader.getResourceAsStream("config/forks.txt")
-    val users = scala.io.Source.fromInputStream(forks).getLines().toList
-      .map(_.trim)
-      .filter(_ matches "\\S+")
-      .map(_.replaceAll("\\W", "_"))
-      .map(_.toLowerCase)
-      .sorted
-
-    new ExperimentSuite(users.map(oddsemordnilapsSmall))
+    new ExperimentSuite(config.getUsers().map(oddsemordnilapsSmall))
   }
 }

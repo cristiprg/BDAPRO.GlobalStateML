@@ -56,14 +56,6 @@ class palindrome extends ApplicationContextAware {
 
   @Bean(name = Array("palindrome"))
   def palindrome: ExperimentSuite = {
-    val forks = ctx.getClassLoader.getResourceAsStream("config/forks.txt")
-    val users = scala.io.Source.fromInputStream(forks).getLines().toList
-      .map(_.trim)
-      .filter(_ matches "\\S+")
-      .map(_.replaceAll("\\W", "_"))
-      .map(_.toLowerCase)
-      .sorted
-
-    new ExperimentSuite(users.map(palindromeSmall))
+    new ExperimentSuite(config.getUsers().map(palindromeSmall))
   }
 }
