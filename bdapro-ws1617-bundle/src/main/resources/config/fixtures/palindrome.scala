@@ -56,6 +56,6 @@ class palindrome extends ApplicationContextAware {
 
   @Bean(name = Array("palindrome"))
   def palindrome: ExperimentSuite = {
-    new ExperimentSuite(config.getUsers().map(palindromeSmall))
+    new ExperimentSuite(config.getUsers("palindrome", "Palindrome").map(palindromeSmall))
   }
 }

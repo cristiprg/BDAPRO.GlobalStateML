@@ -56,6 +56,6 @@ class oddsemordnilaps extends ApplicationContextAware {
 
   @Bean(name = Array("oddsemordnilaps"))
   def oddsemordnilaps: ExperimentSuite = {
-    new ExperimentSuite(config.getUsers().map(oddsemordnilapsSmall))
+    new ExperimentSuite(config.getUsers("oddsemordnilaps", "OddSemordnilaps").map(oddsemordnilapsSmall))
   }
 }
