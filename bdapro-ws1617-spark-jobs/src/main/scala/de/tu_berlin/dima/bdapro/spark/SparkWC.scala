@@ -14,7 +14,10 @@ object SparkWC {
     val inputPath = args(0)
     val outputPath = args(1)
 
-    val spark = new SparkContext(new SparkConf().setAppName("bdapro-ws1617-spark"))
+    val spark = new SparkContext(new SparkConf()
+      .setAppName("bdapro-globalstate")
+      .setMaster("local"))
+
     spark.textFile(inputPath)
       .flatMap(_.toLowerCase.split("\\W+"))
       .map((_, 1))

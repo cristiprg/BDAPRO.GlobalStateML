@@ -16,9 +16,9 @@
         <scala.tools.version>2.10</scala.tools.version>
 
         <!-- Spark -->
-        <spark.version>1.4.0</spark.version>
+        <spark.version>2.0.2</spark.version>
         <spark.scala.tools.version>2.10</spark.scala.tools.version>
-        <spark.mllib.version>1.1.0</spark.mllib.version>
+        <spark.mllib.version>2.0.2</spark.mllib.version>
     </properties>
 
     <dependencies>
@@ -27,19 +27,19 @@
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
             <version>${scala.version}</version>
-            <scope>provided</scope>
+            <!--<scope>provided</scope>-->
         </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-compiler</artifactId>
             <version>${scala.version}</version>
-            <scope>provided</scope>
+            <!--<scope>provided</scope>-->
         </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-reflect</artifactId>
             <version>${scala.version}</version>
-            <scope>provided</scope>
+            <!--<scope>provided</scope>-->
         </dependency>
 
         <!-- Spark -->
@@ -47,13 +47,20 @@
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-core_${spark.scala.tools.version}</artifactId>
             <version>${spark.version}</version>
-            <scope>provided</scope>
+            <!--<scope>provided</scope>-->
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-mllib_2.10</artifactId>
             <version>${spark.mllib.version}</version>
-            <scope>provided</scope>
+            <!--<scope>provided</scope>-->
+        </dependency>
+        <dependency>
+            <groupId>redis.clients</groupId>
+            <artifactId>jedis</artifactId>
+            <version>2.9.0</version>
+            <type>jar</type>
+            <scope>compile</scope>
         </dependency>
     </dependencies>
 
