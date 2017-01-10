@@ -1,7 +1,7 @@
 package de.tu_berlin.dima.bdapro.spark.global_state_api
 
 import org.apache.spark.SparkContext
-import redis.clients.jedis.Jedis
+import redis.clients.jedis.{JedisPool, Jedis}
 import scala.collection.JavaConversions._
 
 import org.apache.spark.mllib.linalg.{Matrices, Vector, Matrix}
@@ -9,13 +9,14 @@ import org.apache.spark.mllib.linalg.{Matrices, Vector, Matrix}
 
 /**
   * Stores data structures found in Spark's mllib in Redis.
+  * TODO: perform independent Redis updates in pipelines
   * TODO: add generic type to class and get rid of all the getState(*) functions and use just one getState(): T
   *
-  * @param sc the SparkContext instance used in your program
+  * @param pool a JedisPool instance used for multithreaded-connection with Redis. This object is shared across the cluster
   */
-class StateManager(val sc: SparkContext) {
+class StateManager(val pool: JedisPool) {
 
-  val jedis = new Jedis("localhost") // TODO: connect to whatever exists in the SparkContext
+  var jedis: Jedis = null
   val nrRowsRedisKey: String = "nrRows"
   val nrColsRedisKey: String = "nrCols"
 
@@ -27,17 +28,25 @@ class StateManager(val sc: SparkContext) {
     * @return the state from Redis as a Local Matrix (Dense Matrix)
     */
   def getStateLocalMatrix(): Matrix = {
-    val (nrRows: Int, nrCols: Int) = getMatrixDimension()
-    var arrayOfCols: Array[Matrix] = Array()
 
-    0L to nrRows-1 foreach{ index =>
-      // Get index-th row and convert it to array of doubles (from strings)
-      val row = jedis.lrange(index.toString, 0, -1).toList.map(x => x.toDouble).toArray
-      val colMatrix = Matrices.dense(nrCols, 1, row).transpose
-      arrayOfCols = arrayOfCols :+ colMatrix
+    try {
+      jedis = pool.getResource()
+
+      val (nrRows: Int, nrCols: Int) = getMatrixDimension()
+      var arrayOfCols: Array[Matrix] = Array()
+
+      0L to nrRows - 1 foreach { index =>
+        // Get index-th row and convert it to array of doubles (from strings)
+        val row = jedis.lrange(index.toString, 0, -1).toList.map(x => x.toDouble).toArray
+        val colMatrix = Matrices.dense(nrCols, 1, row).transpose
+        arrayOfCols = arrayOfCols :+ colMatrix
+      }
+
+      Matrices.vertcat(arrayOfCols)
     }
-
-    Matrices.vertcat(arrayOfCols)
+    finally {
+      if (jedis != null) jedis.close()
+    }
   }
 
 
@@ -60,7 +69,13 @@ class StateManager(val sc: SparkContext) {
     * @param matrix instance of Local Matrix to be stored in Redis
     */
   def setState(matrix: Matrix): Unit = {
-    setStateMatrix(matrix)
+    try {
+      jedis = pool.getResource()
+      setStateMatrix(matrix)
+    }
+    finally {
+      if (jedis != null) jedis.close()
+    }
   }
 
   private def setStateMatrix(matrix: Matrix): Unit = {
