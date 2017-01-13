@@ -1,6 +1,6 @@
 package de.tu_berlin.dima.bdapro.spark.global_state_api
 
-import org.apache.spark.mllib.linalg.{Matrices, Matrix}
+import org.apache.spark.mllib.linalg.{Vectors, Vector, Matrices, Matrix}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.FunSuite
 import redis.clients.jedis.{JedisPoolConfig, JedisPool}
@@ -23,6 +23,37 @@ class StateManagerTest extends FunSuite {
     testLocalMatrix(stateManager, matrix1)
     testLocalMatrix(stateManager, matrix2)
     testLocalMatrix(stateManager, matrix1)
+    testLocalMatrix(stateManager, matrix2)
+  }
+
+  /**
+    * Testes whether local (sparse) matrices are stored correctly. This test sets and gets the a small matrix and
+    * compares the values.
+    */
+  test("Simple Set/Get State Array of Vectors") {
+
+    val pool: JedisPool = new JedisPool(new JedisPoolConfig(), "localhost")
+    val stateManager = new StateManager(pool)
+
+    val array1: Array[Vector] = Array(Vectors.dense(1.0, 2.0, 3.0), Vectors.dense(3.0, 2.0, 1.0))
+    val array2: Array[Vector] = Array(Vectors.dense(1.0, 2.0, 3.0, 4.0), Vectors.dense(4.0, 3.0, 2.0, 1.0), Vectors.dense(1.5, 1.5, 1.5, 1.5))
+
+    // Test
+    assert(!arrayOfVectorsAreEqual(array1, array2))
+    testArrayOfVectors(stateManager, array1)
+    testArrayOfVectors(stateManager, array2)
+    testArrayOfVectors(stateManager, array1)
+    testArrayOfVectors(stateManager, array2)
+  }
+
+  private def testArrayOfVectors(stateManager: StateManager, array: Array[Vector]): Unit = {
+    stateManager.setState(array)
+    val retrievedArray = stateManager.getStateArrayOfVectors()
+    assert(arrayOfVectorsAreEqual(array, retrievedArray))
+  }
+
+  private def arrayOfVectorsAreEqual(array1: Array[Vector], array2: Array[Vector]): Boolean = {
+    array1.sameElements(array2)
   }
 
   private def testLocalMatrix(stateManager: StateManager, matrix: Matrix): Unit = {

@@ -6,6 +6,8 @@ import scala.collection.JavaConversions._
 
 import org.apache.spark.mllib.linalg.{Matrices, Vector, Matrix}
 
+import scala.collection.mutable.ArrayBuffer
+
 
 /**
   * Stores data structures found in Spark's mllib in Redis.
@@ -37,7 +39,7 @@ class StateManager(val pool: JedisPool) {
 
       0L to nrRows - 1 foreach { index =>
         // Get index-th row and convert it to array of doubles (from strings)
-        val row = jedis.lrange(index.toString, 0, -1).toList.map(x => x.toDouble).toArray
+        val row = jedis.lrange(index.toString, 0, nrCols-1).toList.map(x => x.toDouble).toArray
         val colMatrix = Matrices.dense(nrCols, 1, row).transpose
         arrayOfCols = arrayOfCols :+ colMatrix
       }
@@ -47,6 +49,22 @@ class StateManager(val pool: JedisPool) {
     finally {
       if (jedis != null) jedis.close()
     }
+  }
+
+  /**
+    * Same as getStateLocalMatrix, but returns an array of mllib.Vectors for convenience.
+    * It's a wrapper over getStateLocalMatrix so no connection from the pool is required.
+    */
+  def getStateArrayOfVectors(): Array[Vector] = {
+    val matrix: Matrix = getStateLocalMatrix()
+    var arrayBuf = ArrayBuffer[Vector]()
+
+    val it = matrix.rowIter
+    while(it.hasNext) {
+      arrayBuf += it.next
+    }
+
+    arrayBuf.toArray
   }
 
 
@@ -89,6 +107,27 @@ class StateManager(val pool: JedisPool) {
     }
   }
 
+  def setState(array: Array[Vector]): Unit = {
+    try {
+      jedis = pool.getResource()
+      setStateMatrix(array)
+    }
+    finally {
+      if (jedis != null) jedis.close()
+    }
+  }
+
+  private def setStateMatrix(array: Array[Vector]): Unit = {
+    setMatrixDimensions(array.length, array(0).size)
+    var i = 0
+    array.foreach(x => {
+      setLocalVector(i, x)
+      i += 1
+    })
+  }
+
+
+
   /**
     * Saves the dimension of the matrix to Redis.
     *
@@ -107,19 +146,17 @@ class StateManager(val pool: JedisPool) {
     * @param index the index of the row/vector in the matrix to be stored. This is used as key in Redis
     * @param vector the index-th row/vector in the matrix. This is used as value in Redis
     */
-  private def setLocalVector(index: Int, vector: Vector): Unit = {
+  def setLocalVector(index: Int, vector: Vector): Unit = {
 
     val key = index.toString
-    val lengthInRedis = jedis.llen(key)
+
+    // Delete old key and create a new one
+    if (jedis.exists(key))
+      jedis.del(key)
 
     if (!jedis.exists(key)) {
       // TODO: conversion toDense might slow down too much
       vector.toDense.values.foreach(x => jedis.rpush(key, x.toString))
     }
-    else
-      vector.toDense.foreachActive((index, value) => {
-        jedis.lset(key, index.toLong, value.toString)
-        Unit
-      })
   }
 }
