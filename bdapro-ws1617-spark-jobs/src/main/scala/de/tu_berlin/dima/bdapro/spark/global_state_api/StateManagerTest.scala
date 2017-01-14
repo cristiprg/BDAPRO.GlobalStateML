@@ -27,7 +27,7 @@ class StateManagerTest extends FunSuite {
   }
 
   /**
-    * Testes whether local (sparse) matrices are stored correctly. This test sets and gets the a small matrix and
+    * Testes whether arrays of local dense vectors are stored correctly. This test sets and gets the a small vector and
     * compares the values.
     */
   test("Simple Set/Get State Array of Vectors") {
@@ -44,6 +44,31 @@ class StateManagerTest extends FunSuite {
     testArrayOfVectors(stateManager, array2)
     testArrayOfVectors(stateManager, array1)
     testArrayOfVectors(stateManager, array2)
+  }
+
+  /**
+    * Tests local vectors
+    */
+  test("Simple Set/Get State of State Vectors") {
+
+    val pool: JedisPool = new JedisPool(new JedisPoolConfig(), "localhost")
+    val stateManager = new StateManager(pool)
+
+    val vector1: Vector = Vectors.dense(1.0, 2.0, 3.0)
+    val vector2: Vector = Vectors.dense(1.0, 2.0, 3.0, 4.0)
+
+    // Test
+    assert(!vector1.equals(vector2))
+    testVector(stateManager, vector1)
+    testVector(stateManager, vector2)
+    testVector(stateManager, vector1)
+    testVector(stateManager, vector2)
+  }
+
+  private def testVector(stateManager: StateManager, vector: Vector): Unit = {
+    stateManager.setStateLocalVector("key", vector)
+    val retrievedVector = stateManager.getStateLocalVector("key")
+    assert(vector.equals(retrievedVector))
   }
 
   private def testArrayOfVectors(stateManager: StateManager, array: Array[Vector]): Unit = {

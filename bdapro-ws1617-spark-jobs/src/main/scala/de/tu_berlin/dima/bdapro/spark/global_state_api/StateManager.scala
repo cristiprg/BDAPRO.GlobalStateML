@@ -4,7 +4,7 @@ import org.apache.spark.SparkContext
 import redis.clients.jedis.{JedisPool, Jedis}
 import scala.collection.JavaConversions._
 
-import org.apache.spark.mllib.linalg.{Matrices, Vector, Matrix}
+import org.apache.spark.mllib.linalg._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -146,7 +146,7 @@ class StateManager(val pool: JedisPool) {
     * @param index the index of the row/vector in the matrix to be stored. This is used as key in Redis
     * @param vector the index-th row/vector in the matrix. This is used as value in Redis
     */
-  def setLocalVector(index: Int, vector: Vector): Unit = {
+  private def setLocalVector(index: Int, vector: Vector): Unit = {
 
     val key = index.toString
 
@@ -157,6 +157,54 @@ class StateManager(val pool: JedisPool) {
     if (!jedis.exists(key)) {
       // TODO: conversion toDense might slow down too much
       vector.toDense.values.foreach(x => jedis.rpush(key, x.toString))
+    }
+  }
+
+
+  /**
+    * Saves the state as a Vector in Redis, identifiable by a specific key. This can be used to
+    * store additional useful information besides the matrix.
+    * TODO: use the private setLocalVector
+    *
+    * @param key the Key, the name of the vector
+    * @param vector the vector to be stored in Redis
+    */
+  def setStateLocalVector(key: String, vector: Vector): Unit = {
+    try {
+      jedis = pool.getResource()
+      // Delete old key and create a new one
+      if (jedis.exists(key))
+        jedis.del(key)
+
+      if (!jedis.exists(key)) {
+        // TODO: conversion toDense might slow down too much
+        vector.toDense.values.foreach(x => jedis.rpush(key, x.toString))
+      }
+    }
+    finally {
+      if (jedis != null) jedis.close()
+    }
+  }
+
+
+  /**
+    * Retrieves the state Vector identified by key.
+    * @param key the key of the Vector you want
+    * @return the Vector you want
+    */
+  def getStateLocalVector(key: String): DenseVector = {
+    try {
+      jedis = pool.getResource()
+      // Delete old key and create a new one
+      if (!jedis.exists(key))
+        null
+      else {
+          val row = jedis.lrange(key, 0, -1).toList.map(x => x.toDouble).toArray
+          Vectors.dense(row).asInstanceOf[DenseVector]
+        }
+      }
+    finally {
+      if (jedis != null) jedis.close()
     }
   }
 }
