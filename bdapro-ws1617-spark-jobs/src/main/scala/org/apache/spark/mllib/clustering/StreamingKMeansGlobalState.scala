@@ -17,17 +17,18 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext._
 import org.apache.spark.internal.Logging
-import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Vectors, BLAS, Vector}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
+import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaDStream}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
+import redis.clients.jedis.JedisPool
+
+import scala.reflect.ClassTag
 
 /**
   * StreamingKMeansModel extends MLlib's KMeansModel for streaming
@@ -62,17 +63,18 @@ import org.apache.spark.util.random.XORShiftRandom
   * The definition remains the same whether the time unit is given
   * as batches or points.
   */
-@Since("1.2.0")
-class StreamingKMeansModel @Since("1.2.0") (
-                                             @Since("1.2.0") override val clusterCenters: Array[Vector],
-                                             @Since("1.2.0") val clusterWeights: Array[Double])
-  extends KMeansModel(clusterCenters) with Logging {
+class StreamingKMeansModelGlobalState(
+                                       //override val clusterCenters: Array[Vector],
+                                       override val pool: JedisPool,
+                                       val clusterWeights: Array[Double])
+  extends KMeansModelGlobalState(pool) with Logging{
+
 
   /**
     * Perform a k-means update on a batch of data.
     */
   @Since("1.2.0")
-  def update(data: RDD[Vector], decayFactor: Double, timeUnit: String): StreamingKMeansModel = {
+  def update(data: RDD[Vector], decayFactor: Double, timeUnit: String): StreamingKMeansModelGlobalState = {
 
     // find nearest cluster to each point
     val closest = data.map(point => (this.predict(point), (point, 1L)))
@@ -82,6 +84,7 @@ class StreamingKMeansModel @Since("1.2.0") (
       BLAS.axpy(1.0, p2._1, p1._1)
       (p1._1, p1._2 + p2._2)
     }
+
     val dim = clusterCenters(0).size
 
     val pointStats: Array[(Int, (Vector, Long))] = closest
@@ -89,8 +92,8 @@ class StreamingKMeansModel @Since("1.2.0") (
       .collect()
 
     val discount = timeUnit match {
-      case StreamingKMeans.BATCHES => decayFactor
-      case StreamingKMeans.POINTS =>
+      case StreamingKMeansGlobalState.BATCHES => decayFactor
+      case StreamingKMeansGlobalState.POINTS =>
         val numNewPoints = pointStats.view.map { case (_, (_, n)) =>
           n
         }.sum
@@ -141,6 +144,7 @@ class StreamingKMeansModel @Since("1.2.0") (
       }
     }
 
+    setClusterCenters(clusterCenters)
     this
   }
 }
@@ -163,15 +167,16 @@ class StreamingKMeansModel @Since("1.2.0") (
   * }}}
   */
 @Since("1.2.0")
-class StreamingKMeans @Since("1.2.0") (
-                                        @Since("1.2.0") var k: Int,
-                                        @Since("1.2.0") var decayFactor: Double,
-                                        @Since("1.2.0") var timeUnit: String) extends Logging with Serializable {
+class StreamingKMeansGlobalState(
+                                  @Since("1.2.0") var k: Int,
+                                  @Since("1.2.0") var decayFactor: Double,
+                                  @Since("1.2.0") var timeUnit: String,
+                                  val pool: JedisPool) extends Logging with Serializable {
 
   @Since("1.2.0")
-  def this() = this(2, 1.0, StreamingKMeans.BATCHES)
+  def this(pool: JedisPool) = this(2, 1.0, StreamingKMeansGlobalState.BATCHES, pool)
 
-  protected var model: StreamingKMeansModel = new StreamingKMeansModel(null, null)
+  protected var model: StreamingKMeansModelGlobalState = new StreamingKMeansModelGlobalState(pool, null)
 
   /**
     * Set the number of clusters.
@@ -204,7 +209,7 @@ class StreamingKMeans @Since("1.2.0") (
   def setHalfLife(halfLife: Double, timeUnit: String): this.type = {
     require(halfLife > 0,
       s"Half life must be positive but got ${halfLife}")
-    if (timeUnit != StreamingKMeans.BATCHES && timeUnit != StreamingKMeans.POINTS) {
+    if (timeUnit != StreamingKMeansGlobalState.BATCHES && timeUnit != StreamingKMeansGlobalState.POINTS) {
       throw new IllegalArgumentException("Invalid time unit for decay: " + timeUnit)
     }
     this.decayFactor = math.exp(math.log(0.5) / halfLife)
@@ -224,7 +229,11 @@ class StreamingKMeans @Since("1.2.0") (
       s"Number of initial centers must be ${k} but got ${centers.size}")
     require(weights.forall(_ >= 0),
       s"Weight for each inital center must be nonnegative but got [${weights.mkString(" ")}]")
-    model = new StreamingKMeansModel(centers, weights)
+    //model = new StreamingKMeansModelGlobalState(centers, weights)
+    model = new StreamingKMeansModelGlobalState(pool, weights)
+      .setClusterCenters(centers)
+      .asInstanceOf[StreamingKMeansModelGlobalState]
+
     this
   }
 
@@ -244,7 +253,10 @@ class StreamingKMeans @Since("1.2.0") (
     val random = new XORShiftRandom(seed)
     val centers = Array.fill(k)(Vectors.dense(Array.fill(dim)(random.nextGaussian())))
     val weights = Array.fill(k)(weight)
-    model = new StreamingKMeansModel(centers, weights)
+    //model = new StreamingKMeansModelGlobalState(centers, weights)
+    model = new StreamingKMeansModelGlobalState(pool, weights)
+      .setClusterCenters(centers)
+      .asInstanceOf[StreamingKMeansModelGlobalState]
     this
   }
 
@@ -252,7 +264,7 @@ class StreamingKMeans @Since("1.2.0") (
     * Return the latest model.
     */
   @Since("1.2.0")
-  def latestModel(): StreamingKMeansModel = {
+  def latestModel(): StreamingKMeansModelGlobalState = {
     model
   }
 
@@ -331,7 +343,7 @@ class StreamingKMeans @Since("1.2.0") (
   }
 }
 
-private[clustering] object StreamingKMeans {
+private[clustering] object StreamingKMeansGlobalState {
   final val BATCHES = "batches"
   final val POINTS = "points"
 }

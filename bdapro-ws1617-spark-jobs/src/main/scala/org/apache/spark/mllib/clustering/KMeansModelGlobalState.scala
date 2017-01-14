@@ -17,6 +17,9 @@
 
 package org.apache.spark.mllib.clustering
 
+import de.tu_berlin.dima.bdapro.spark.global_state_api.StateManager
+import redis.clients.jedis.{JedisPoolConfig, JedisPool}
+
 import scala.collection.JavaConverters._
 
 import org.json4s._
@@ -26,7 +29,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -36,14 +39,30 @@ import org.apache.spark.sql.{Row, SparkSession}
   * A clustering model for K-means. Each point belongs to the cluster with the closest center.
   */
 @Since("0.8.0")
-class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vector])
+class KMeansModelGlobalState @Since("1.1.0")(
+                                              //@Since("1.0.0") var _clusterCenters: Array[Vector])
+                                              val pool: JedisPool)
   extends Saveable with Serializable with PMMLExportable {
+
+  lazy val stateManager = new StateManager(pool)
+  var _clusterCenters: Array[Vector] = null
+
+  def clusterCenters: Array[Vector] = {
+    stateManager.getStateArrayOfVectors()
+  }
+
+  def setClusterCenters(newClusterCenters: Array[Vector]) = {
+    //_clusterCenters = newClusterCenters
+    //_clusterCenters = Array(Vectors.dense(0, 0, 0, 0), Vectors.dense(0, 0, 0, 0))
+    stateManager.setState(newClusterCenters)
+    this
+  }
 
   /**
     * A Java-friendly constructor that takes an Iterable of Vectors.
     */
-  @Since("1.4.0")
-  def this(centers: java.lang.Iterable[Vector]) = this(centers.asScala.toArray)
+  //@Since("1.4.0")
+  //def this(centers: java.lang.Iterable[Vector]) = this(centers.asScala.toArray)
 
   /**
     * Total number of clusters.
@@ -92,18 +111,18 @@ class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vec
 
   @Since("1.4.0")
   override def save(sc: SparkContext, path: String): Unit = {
-    KMeansModel.SaveLoadV1_0.save(sc, this, path)
+    KMeansModelGlobalState.SaveLoadV1_0.save(sc, this, path)
   }
 
   override protected def formatVersion: String = "1.0"
 }
 
 @Since("1.4.0")
-object KMeansModel extends Loader[KMeansModel] {
+object KMeansModelGlobalState extends Loader[KMeansModelGlobalState] {
 
   @Since("1.4.0")
-  override def load(sc: SparkContext, path: String): KMeansModel = {
-    KMeansModel.SaveLoadV1_0.load(sc, path)
+  override def load(sc: SparkContext, path: String): KMeansModelGlobalState = {
+    KMeansModelGlobalState.SaveLoadV1_0.load(sc, path)
   }
 
   private case class Cluster(id: Int, point: Vector)
@@ -122,7 +141,7 @@ object KMeansModel extends Loader[KMeansModel] {
     private[clustering]
     val thisClassName = "org.apache.spark.mllib.clustering.KMeansModel"
 
-    def save(sc: SparkContext, model: KMeansModel, path: String): Unit = {
+    def save(sc: SparkContext, model: KMeansModelGlobalState, path: String): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
@@ -133,7 +152,7 @@ object KMeansModel extends Loader[KMeansModel] {
       spark.createDataFrame(dataRDD).write.parquet(Loader.dataPath(path))
     }
 
-    def load(sc: SparkContext, path: String): KMeansModel = {
+    def load(sc: SparkContext, path: String): KMeansModelGlobalState = {
       implicit val formats = DefaultFormats
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
@@ -144,7 +163,13 @@ object KMeansModel extends Loader[KMeansModel] {
       Loader.checkSchema[Cluster](centroids.schema)
       val localCentroids = centroids.rdd.map(Cluster.apply).collect()
       assert(k == localCentroids.length)
-      new KMeansModel(localCentroids.sortBy(_.id).map(_.point))
+      //new KMeansModelGlobalState(localCentroids.sortBy(_.id).map(_.point))
+
+      // TODO
+      //val model = new KMeansModelGlobalState()
+      //model.setClusterCenters(localCentroids.sortBy(_.id).map(_.point))
+      //model
+      null
     }
   }
 }
