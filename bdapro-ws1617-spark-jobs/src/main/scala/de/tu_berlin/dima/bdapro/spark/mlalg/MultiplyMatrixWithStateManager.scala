@@ -1,12 +1,13 @@
 package de.tu_berlin.dima.bdapro.spark.mlalg
 
 import de.tu_berlin.dima.bdapro.spark.global_state_api.StateManager
-import de.tu_berlin.dima.bdapro.spark.mlalg.util.DummySource
+import de.tu_berlin.dima.bdapro.spark.mlalg.util.{CSVFileSource, DummySource}
 import org.apache.spark._
 import org.apache.spark.storage._
 import org.apache.spark.streaming._
 
 import org.apache.spark.mllib.linalg.{DenseMatrix, Vectors, Matrices, Matrix}
+import redis.clients.jedis.{JedisPoolConfig, JedisPool}
 
 /**
   * Inspired from the example from databricks
@@ -16,9 +17,11 @@ object MultiplyMatrixWithStateManager {
 
   val sc= new SparkContext(new SparkConf()
     .setAppName("bdapro-globalstate-wordCountWithState")
-    .setMaster("local"))
+    .setMaster("local[*]"))
 
-  val stateManager = new StateManager(sc)
+  val pool: JedisPool = new JedisPool(new JedisPoolConfig(), "localhost")
+  //val stateManager = new StateManager(sc)
+  val stateManager = new StateManager(pool)
 
   // === Configuration to control the flow of the application ===
   val stopActiveContext = true
@@ -32,7 +35,7 @@ object MultiplyMatrixWithStateManager {
   //val initialRDD = sc.parallelize(List(("1", 100L), ("2", 32L)))
   val identityMatrix: Matrix = Matrices.dense(3, 3, Array(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0))
   val twoMatrix: Matrix = Matrices.dense(3, 3, Array(2.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 2.0))
-  val initialRDD = sc.parallelize(List((1, identityMatrix)))
+  val initialRDD = sc.parallelize(List((1, stateManager)))
   val stateSpec = StateSpec.function(trackStateFunc _)
     .initialState(initialRDD)
 //    .numPartitions(2)
@@ -47,18 +50,26 @@ object MultiplyMatrixWithStateManager {
     * - state has the running count of the word. It's type is Long. The user can provide more custom classes as type too.
     * - The return value is the new (key, value) pair where value is the updated count.
     */
-  def trackStateFunc(batchTime: Time, key: Int, value: Option[Int], state: State[Matrix]): Option[Matrix] = {
+  def trackStateFunc(batchTime: Time, key: Int, value: Option[Int], pseudoState: State[StateManager]): Option[Matrix] = {
     //val sum = value.getOrElse(0).toLong + state.getOption.getOrElse(0L)
     //val output = (key, sum)
     //state.update(sum)
     //Some(output)
 
     // Either take the matrix from the state or from Redis
-    var stateMatrix = state.getOption.getOrElse(identityMatrix)//.getStateLocalMatrix()
+    // Varianta cu State[Matrix]
+    /*var stateMatrix = state.getOption.getOrElse(identityMatrix)//.getStateLocalMatrix()
     stateMatrix = stateMatrix.multiply(twoMatrix.asInstanceOf[DenseMatrix])
     state.update(stateMatrix)
     stateManager.setState(stateMatrix)
-    Some(stateMatrix)
+    Some(stateMatrix)*/
+
+    // Varianta cu State[StateManager]
+    val stateManager: StateManager = pseudoState.get()
+    val stateMatrix = stateManager.getStateLocalMatrix()
+    val newStateMatrix = stateMatrix.multiply(twoMatrix.asInstanceOf[DenseMatrix])
+    stateManager.setState(newStateMatrix)
+    Some(newStateMatrix)
   }
 
 
@@ -72,11 +83,22 @@ object MultiplyMatrixWithStateManager {
     val ssc = new StreamingContext(sc, Seconds(batchIntervalSeconds))
 
     // Create a stream that generates 1000 lines per second
-    val stream = ssc.receiverStream(new DummySource(eventsPerSecond))
+    //val stream = ssc.receiverStream(new DummySource(eventsPerSecond))
+    val filePath = "/home/cristiprg/Spark/data/iris2.csv"
+    //val trainingDataStream = ssc.receiverStream(new CSVFileSource(1, filePath)).map(Vectors.parse)
+    val stream = ssc.socketTextStream("localhost", 9999)
 
     // Split the lines into words, and create a paired (key-value) dstream
     // val wordStream = stream.flatMap { _.split(" ")  }.map(word => (word, 1))
-    val wordStream = stream.map ( x => (x,x) ).mapWithState(stateSpec)
+    // val wordStream = stream.map ( x => (x,x) ).mapWithState(stateSpec)
+    stateManager.setState(identityMatrix)
+    val wordStream = stream.map (x => {
+      val stateMatrix = stateManager.getStateLocalMatrix()
+      val anotherMatrix: Matrix = Matrices.dense(3, 3, Array(1.1, 0.0, 0.0, 0.0, 1.1, 0.0, 0.0, 0.0, 1.1))
+      val newStateMatrix = stateMatrix.multiply(twoMatrix.asInstanceOf[DenseMatrix])
+      stateManager.setState(newStateMatrix)
+      Some(newStateMatrix)
+    })
     wordStream.print()
 
     // This represents the emitted stream from the trackStateFunc. Since we emit every input record with the updated value,
@@ -85,12 +107,12 @@ object MultiplyMatrixWithStateManager {
     // wordCountStateStream.print()
 
     // A snapshot of the state for the current batch. This dstream contains one entry per key.
-    val stateSnapshotStream = wordStream.stateSnapshots()
+    /*val stateSnapshotStream = wordStream.stateSnapshots()
     stateSnapshotStream.foreachRDD { rdd =>
     //  //rdd.toDF("word", "count").registerTempTable("batch_word_count")
       rdd.saveAsTextFile("/home/cristiprg/Spark/Output")
     }
-
+  */
     ssc.remember(Minutes(1))  // To make sure data is not deleted by the time we query it interactively
 
     ssc.checkpoint("/home/cristiprg/Spark/Checkpoint")
