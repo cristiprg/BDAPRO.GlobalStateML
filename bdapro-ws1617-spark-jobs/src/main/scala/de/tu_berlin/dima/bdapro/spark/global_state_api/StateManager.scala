@@ -1,7 +1,7 @@
 package de.tu_berlin.dima.bdapro.spark.global_state_api
 
 import org.apache.spark.SparkContext
-import redis.clients.jedis.{JedisPool, Jedis}
+import redis.clients.jedis.{Pipeline, JedisPool, Jedis, Response}
 import scala.collection.JavaConversions._
 
 import org.apache.spark.mllib.linalg._
@@ -18,7 +18,7 @@ import scala.collection.mutable.ArrayBuffer
   */
 class StateManager(val pool: JedisPool) {
 
-  var jedis: Jedis = null
+  //var jedis: Jedis = null
   val nrRowsRedisKey: String = "nrRows"
   val nrColsRedisKey: String = "nrCols"
 
@@ -31,15 +31,28 @@ class StateManager(val pool: JedisPool) {
     */
   def getStateLocalMatrix(): Matrix = {
 
+    var jedis: Jedis = null
     try {
-      jedis = pool.getResource()
 
+      // Important aspect: acquire resource after getMatrixDimension() returns since the method itself acquires a
+      // resource to contact Redis
       val (nrRows: Int, nrCols: Int) = getMatrixDimension()
       var arrayOfCols: Array[Matrix] = Array()
 
+      jedis = pool.getResource()
+      val pipe: Pipeline = jedis.pipelined()
+
+      // Firstly put everything into the pipeline (and of course, sync the pipe) and then perform computations
+      var responseArray: Array[Response[java.util.List[java.lang.String]]] = new Array[Response[java.util.List[java.lang.String]]](nrRows)
+      0L to nrRows - 1 foreach { index =>
+        val response = pipe.lrange(index.toString, 0, nrCols-1)
+        responseArray(index.toInt) = response
+      }
+      pipe.sync()
+
       0L to nrRows - 1 foreach { index =>
         // Get index-th row and convert it to array of doubles (from strings)
-        val row = jedis.lrange(index.toString, 0, nrCols-1).toList.map(x => x.toDouble).toArray
+        val row = responseArray(index.toInt).get.toList.map(x => x.toDouble).toArray
         val colMatrix = Matrices.dense(nrCols, 1, row).transpose
         arrayOfCols = arrayOfCols :+ colMatrix
       }
@@ -74,10 +87,26 @@ class StateManager(val pool: JedisPool) {
     * @return a tuple containing the dimensions (nrRows, nrCols)
     */
   private def getMatrixDimension(): (Int, Int) = {
-    val nrRows = jedis.get(nrRowsRedisKey).toInt
-    val nrCols = jedis.get(nrColsRedisKey).toInt
+    var jedis: Jedis = null
+    var nrRows: Response[String] = null
+    var nrCols: Response[String] = null
+    try {
+      jedis = pool.getResource()
+      val pipe: Pipeline = jedis.pipelined()
+      // TODO possible deadlock here
+      nrRows = pipe.get(nrRowsRedisKey)
+      nrCols = pipe.get(nrColsRedisKey)
+      pipe.sync()
+    }
+    finally {
+      if (jedis != null) jedis.close()
+    }
 
-    (nrRows, nrCols)
+    // TODO return error? Throw exception?
+    if (nrRows == null || nrCols == null)
+      (0, 0)
+
+    (nrRows.get.toInt, nrCols.get.toInt)
   }
 
   /**
@@ -87,41 +116,46 @@ class StateManager(val pool: JedisPool) {
     * @param matrix instance of Local Matrix to be stored in Redis
     */
   def setState(matrix: Matrix): Unit = {
+    var jedis: Jedis = null
     try {
       jedis = pool.getResource()
-      setStateMatrix(matrix)
+      setStateMatrix(matrix, jedis)
     }
     finally {
       if (jedis != null) jedis.close()
     }
   }
 
-  private def setStateMatrix(matrix: Matrix): Unit = {
+  private def setStateMatrix(matrix: Matrix, jedis: Jedis): Unit = {
     val it = matrix.rowIter
     var i: Int = 0
 
-    setMatrixDimensions(matrix.numRows, matrix.numCols)
+    val pipeline = jedis.pipelined()
+    setMatrixDimensions(matrix.numRows, matrix.numCols, pipeline)
     while(it.hasNext) {
-      setLocalVector(i, it.next)
+      setLocalVector(i, it.next, pipeline)
       i += 1
     }
+    pipeline.sync()
   }
 
   def setState(array: Array[Vector]): Unit = {
+    var jedis: Jedis = null
     try {
       jedis = pool.getResource()
-      setStateMatrix(array)
+      setStateMatrix(array, jedis)
     }
     finally {
       if (jedis != null) jedis.close()
     }
   }
 
-  private def setStateMatrix(array: Array[Vector]): Unit = {
-    setMatrixDimensions(array.length, array(0).size)
+  private def setStateMatrix(array: Array[Vector], jedis: Jedis): Unit = {
+    val pipeline = jedis.pipelined()
+    setMatrixDimensions(array.length, array(0).size, pipeline)
     var i = 0
     array.foreach(x => {
-      setLocalVector(i, x)
+      setLocalVector(i, x, pipeline)
       i += 1
     })
   }
@@ -134,9 +168,9 @@ class StateManager(val pool: JedisPool) {
     * @param nrRows number of rows
     * @param nrCols number of columns
     */
-  private def setMatrixDimensions(nrRows: Int, nrCols: Int): Unit = {
-    jedis.set(nrRowsRedisKey, nrRows.toString)
-    jedis.set(nrColsRedisKey, nrCols.toString)
+  private def setMatrixDimensions(nrRows: Int, nrCols: Int, pipeline: Pipeline): Unit = {
+    pipeline.set(nrRowsRedisKey, nrRows.toString)
+    pipeline.set(nrColsRedisKey, nrCols.toString)
   }
 
   /**
@@ -146,18 +180,17 @@ class StateManager(val pool: JedisPool) {
     * @param index the index of the row/vector in the matrix to be stored. This is used as key in Redis
     * @param vector the index-th row/vector in the matrix. This is used as value in Redis
     */
-  private def setLocalVector(index: Int, vector: Vector): Unit = {
+  private def setLocalVector(index: Int, vector: Vector, pipeline: Pipeline): Unit = {
 
-    val key = index.toString
+    // Delete old key and create a new one.
+    // If you're confused, check https://github.com/xetorthio/jedis/issues/566
+    // There is an issue with calling Pipeline.del() from Scala and this is a workaround.
+    val keyArr = Array[String](index.toString)
+    pipeline.del(keyArr:_*)
+    val key = keyArr(0)
 
-    // Delete old key and create a new one
-    if (jedis.exists(key))
-      jedis.del(key)
-
-    if (!jedis.exists(key)) {
-      // TODO: conversion toDense might slow down too much
-      vector.toDense.values.foreach(x => jedis.rpush(key, x.toString))
-    }
+    // TODO: conversion toDense might slow down too much
+    vector.toDense.values.foreach(x => pipeline.rpush(key, x.toString))
   }
 
 
@@ -170,16 +203,20 @@ class StateManager(val pool: JedisPool) {
     * @param vector the vector to be stored in Redis
     */
   def setStateLocalVector(key: String, vector: Vector): Unit = {
+    var jedis: Jedis = null
     try {
       jedis = pool.getResource()
-      // Delete old key and create a new one
-      if (jedis.exists(key))
-        jedis.del(key)
+      val pipeline = jedis.pipelined()
 
-      if (!jedis.exists(key)) {
-        // TODO: conversion toDense might slow down too much
-        vector.toDense.values.foreach(x => jedis.rpush(key, x.toString))
-      }
+      // Delete old key and create a new one
+      // If you're confused, check https://github.com/xetorthio/jedis/issues/566
+      // There is an issue with calling Pipeline.del() from Scala and this is a workaround.
+      val keyArr = Array[String](key)
+      pipeline.del(keyArr:_*)
+
+      // TODO: conversion toDense might slow down too much
+      vector.toDense.values.foreach(x => pipeline.rpush(key, x.toString))
+      pipeline.sync()
     }
     finally {
       if (jedis != null) jedis.close()
@@ -193,16 +230,30 @@ class StateManager(val pool: JedisPool) {
     * @return the Vector you want
     */
   def getStateLocalVector(key: String): DenseVector = {
+    var jedis: Jedis = null
     try {
       jedis = pool.getResource()
-      // Delete old key and create a new one
-      if (!jedis.exists(key))
+      val pipeline = jedis.pipelined()
+
+      // Adopt the optimistic approach. First instruction in the pipeline is an "exist" instruction. However, don't
+      // wait for the answer and try getting the key from Redis. In the end, if the key doesn't exist, return null.
+
+      // Here is the same issue with .del(). Check https://github.com/xetorthio/jedis/issues/566
+      val keyExists = pipeline.exists(Array[String](key):_*)
+
+      // Put everything in the pipeline, sync, then check whether the key existed in the first place, and finally
+      // construct the row.
+      val responseArray = pipeline.lrange(key, 0, -1)
+
+      pipeline.sync()
+      if (keyExists.get.toInt < 1) {
         null
-      else {
-          val row = jedis.lrange(key, 0, -1).toList.map(x => x.toDouble).toArray
-          Vectors.dense(row).asInstanceOf[DenseVector]
-        }
       }
+      else {
+        val row = responseArray.get.toList.map(x => x.toDouble).toArray
+        Vectors.dense(row).asInstanceOf[DenseVector]
+      }
+    }
     finally {
       if (jedis != null) jedis.close()
     }

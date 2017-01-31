@@ -7,13 +7,17 @@ import redis.clients.jedis.{JedisPoolConfig, JedisPool}
 
 class StateManagerTest extends FunSuite {
 
+  var jedisPoolConfig = new JedisPoolConfig()
+  jedisPoolConfig.setMaxTotal(1)
+
   /**
     * Testes whether local (sparse) matrices are stored correctly. This test sets and gets the a small matrix and
     * compares the values.
     */
   test("Simple Set/Get State LocalMatrix") {
 
-    val pool: JedisPool = new JedisPool(new JedisPoolConfig(), "localhost")
+
+    val pool: JedisPool = new JedisPool(jedisPoolConfig, "localhost")
     val stateManager = new StateManager(pool)
     val matrix1: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0))
     val matrix2: Matrix = Matrices.dense(4, 2, Array(7.0, 9.0, 11.0, 13.0, 8.0, 10.0, 12.0, 14.0))
@@ -32,7 +36,7 @@ class StateManagerTest extends FunSuite {
     */
   test("Simple Set/Get State Array of Vectors") {
 
-    val pool: JedisPool = new JedisPool(new JedisPoolConfig(), "localhost")
+    val pool: JedisPool = new JedisPool(jedisPoolConfig, "localhost")
     val stateManager = new StateManager(pool)
 
     val array1: Array[Vector] = Array(Vectors.dense(1.0, 2.0, 3.0), Vectors.dense(3.0, 2.0, 1.0))
@@ -51,7 +55,7 @@ class StateManagerTest extends FunSuite {
     */
   test("Simple Set/Get State of State Vectors") {
 
-    val pool: JedisPool = new JedisPool(new JedisPoolConfig(), "localhost")
+    val pool: JedisPool = new JedisPool(jedisPoolConfig, "localhost")
     val stateManager = new StateManager(pool)
 
     val vector1: Vector = Vectors.dense(1.0, 2.0, 3.0)
