@@ -1,9 +1,9 @@
 package de.tu_berlin.dima.bdapro.spark.global_state_api
 
 import org.apache.spark.SparkContext
-import redis.clients.jedis.{Pipeline, JedisPool, Jedis, Response}
-import scala.collection.JavaConversions._
+import redis.clients.jedis._
 
+import scala.collection.JavaConversions._
 import org.apache.spark.mllib.linalg._
 
 import scala.collection.mutable.ArrayBuffer
@@ -14,13 +14,13 @@ import scala.collection.mutable.ArrayBuffer
   * TODO: perform independent Redis updates in pipelines
   * TODO: add generic type to class and get rid of all the getState(*) functions and use just one getState(): T
   *
-  * @param pool a JedisPool instance used for multithreaded-connection with Redis. This object is shared across the cluster
+  * @param REDIS_SERVER_ADDRESS
   */
-class StateManager(val pool: JedisPool) {
+class StateManager(val REDIS_SERVER_ADDRESS: String = "localhost") {
 
   //var jedis: Jedis = null
-  val nrRowsRedisKey: String = "nrRows"
-  val nrColsRedisKey: String = "nrCols"
+  lazy val nrRowsRedisKey: String = "nrRows"
+  lazy val nrColsRedisKey: String = "nrCols"
 
   /**
     * Retrieves the state Local matrix from Redis. Because Local matrices are column-major, it gets a bit difficult
@@ -39,7 +39,7 @@ class StateManager(val pool: JedisPool) {
       val (nrRows: Int, nrCols: Int) = getMatrixDimension()
       var arrayOfCols: Array[Matrix] = Array()
 
-      jedis = pool.getResource()
+      jedis = new Jedis(REDIS_SERVER_ADDRESS)
       val pipe: Pipeline = jedis.pipelined()
 
       // Firstly put everything into the pipeline (and of course, sync the pipe) and then perform computations
@@ -91,7 +91,7 @@ class StateManager(val pool: JedisPool) {
     var nrRows: Response[String] = null
     var nrCols: Response[String] = null
     try {
-      jedis = pool.getResource()
+      jedis = new Jedis(REDIS_SERVER_ADDRESS)
       val pipe: Pipeline = jedis.pipelined()
       // TODO possible deadlock here
       nrRows = pipe.get(nrRowsRedisKey)
@@ -118,7 +118,7 @@ class StateManager(val pool: JedisPool) {
   def setState(matrix: Matrix): Unit = {
     var jedis: Jedis = null
     try {
-      jedis = pool.getResource()
+      jedis = new Jedis(REDIS_SERVER_ADDRESS)
       setStateMatrix(matrix, jedis)
     }
     finally {
@@ -142,7 +142,7 @@ class StateManager(val pool: JedisPool) {
   def setState(array: Array[Vector]): Unit = {
     var jedis: Jedis = null
     try {
-      jedis = pool.getResource()
+      jedis = new Jedis(REDIS_SERVER_ADDRESS)
       setStateMatrix(array, jedis)
     }
     finally {
@@ -203,9 +203,12 @@ class StateManager(val pool: JedisPool) {
     * @param vector the vector to be stored in Redis
     */
   def setStateLocalVector(key: String, vector: Vector): Unit = {
+//    var jedisPoolConfig = new JedisPoolConfig()
+//    jedisPoolConfig.setMaxTotal(250)
+//    val pool: JedisPool = new JedisPool(jedisPoolConfig, REDIS_SERVER_ADDRESS)
     var jedis: Jedis = null
     try {
-      jedis = pool.getResource()
+      jedis = new Jedis(REDIS_SERVER_ADDRESS)
       val pipeline = jedis.pipelined()
 
       // Delete old key and create a new one
@@ -219,7 +222,7 @@ class StateManager(val pool: JedisPool) {
       pipeline.sync()
     }
     finally {
-      if (jedis != null) jedis.close()
+      if (jedis != null && jedis.isConnected()) jedis.close()
     }
   }
 
@@ -230,9 +233,13 @@ class StateManager(val pool: JedisPool) {
     * @return the Vector you want
     */
   def getStateLocalVector(key: String): DenseVector = {
+//    var jedisPoolConfig = new JedisPoolConfig()
+//    jedisPoolConfig.setMaxTotal(250)
+//    val pool: JedisPool = new JedisPool(jedisPoolConfig, REDIS_SERVER_ADDRESS)
+
     var jedis: Jedis = null
     try {
-      jedis = pool.getResource()
+      jedis = new Jedis(REDIS_SERVER_ADDRESS)
       val pipeline = jedis.pipelined()
 
       // Adopt the optimistic approach. First instruction in the pipeline is an "exist" instruction. However, don't
@@ -255,7 +262,7 @@ class StateManager(val pool: JedisPool) {
       }
     }
     finally {
-      if (jedis != null) jedis.close()
+      if (jedis != null && jedis.isConnected()) jedis.close()
     }
   }
 }

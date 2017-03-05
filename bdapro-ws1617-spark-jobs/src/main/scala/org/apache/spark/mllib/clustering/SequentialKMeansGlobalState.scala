@@ -1,5 +1,5 @@
 package org.apache.spark.mllib.clustering
-
+//org.apache.spark.mllib.clustering.SequentialKMeansGlobalState
 import de.tu_berlin.dima.bdapro.spark.global_state_api.StateManager
 import de.tu_berlin.dima.bdapro.spark.mlalg.util.CSVFileSource
 import org.apache.spark._
@@ -15,13 +15,9 @@ import java.io._
   */
 object SequentialKMeansGlobalState {
 
-  val sc= new SparkContext(new SparkConf()
-    .setAppName("bdapro-globalstate-SequentialKMeansGlobalState")
-    .setMaster("local[*]"))
 
-  val pool: JedisPool = new JedisPool(new JedisPoolConfig(), "localhost")
-  //val stateManager = new StateManager(sc)
-  val stateManager = new StateManager(pool)
+  val redisServerAddress = "130.149.21.78"
+  val stateManager = new StateManager(redisServerAddress)
 
   // === Configuration to control the flow of the application ===
   val stopActiveContext = true
@@ -33,13 +29,13 @@ object SequentialKMeansGlobalState {
   val eventsPerSecond = 2    // For the dummy source
 
   //val initialRDD = sc.parallelize(List(("1", 100L), ("2", 32L)))
-  val identityMatrix: Matrix = Matrices.dense(3, 3, Array(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0))
-  val twoMatrix: Matrix = Matrices.dense(3, 3, Array(2.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 2.0))
-  val initialRDD = sc.parallelize(List((1, stateManager)))
-  val stateSpec = StateSpec.function(trackStateFunc _)
-    .initialState(initialRDD)
-//    .numPartitions(2)
-    .timeout(Seconds(60))
+//  val identityMatrix: Matrix = Matrices.dense(3, 3, Array(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0))
+//  val twoMatrix: Matrix = Matrices.dense(3, 3, Array(2.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 2.0))
+//  val initialRDD = sc.parallelize(List((1, stateManager)))
+//  val stateSpec = StateSpec.function(trackStateFunc _)
+//    .initialState(initialRDD)
+////    .numPartitions(2)
+//    .timeout(Seconds(60))
 
   var newContextCreated = false      // Flag to detect whether new context was created or not
 
@@ -50,7 +46,7 @@ object SequentialKMeansGlobalState {
     * - state has the running count of the word. It's type is Long. The user can provide more custom classes as type too.
     * - The return value is the new (key, value) pair where value is the updated count.
     */
-  def trackStateFunc(batchTime: Time, key: Int, value: Option[Int], pseudoState: State[StateManager]): Option[Matrix] = {
+  //def trackStateFunc(batchTime: Time, key: Int, value: Option[Int], pseudoState: State[StateManager]): Option[Matrix] = {
     //val sum = value.getOrElse(0).toLong + state.getOption.getOrElse(0L)
     //val output = (key, sum)
     //state.update(sum)
@@ -65,30 +61,43 @@ object SequentialKMeansGlobalState {
     Some(stateMatrix)*/
 
     // Varianta cu State[StateManager]
-    val stateManager: StateManager = pseudoState.get()
-    val stateMatrix = stateManager.getStateLocalMatrix()
-    val newStateMatrix = stateMatrix.multiply(twoMatrix.asInstanceOf[DenseMatrix])
-    stateManager.setState(newStateMatrix)
-    Some(newStateMatrix)
-  }
+//    val stateManager: StateManager = pseudoState.get()
+//    val stateMatrix = stateManager.getStateLocalMatrix()
+//    val newStateMatrix = stateMatrix.multiply(twoMatrix.asInstanceOf[DenseMatrix])
+//    stateManager.setState(newStateMatrix)
+//    Some(newStateMatrix)
+  //}
 
 
   //val sqlContext = new org.apache.spark.sql.SQLContext(sc)
   //import sqlContext.implicits._
 
+  var filePath = ""
+
   // Function to create a new StreamingContext and set it up
   def creatingFunc(): StreamingContext = {
 
     // Create a StreamingContext
+    val sc= new SparkContext(new SparkConf()
+      .setAppName("bdapro-globalstate-SequentialKMeansGlobalState")
+      //.setMaster("local[*]")
+    )
     val ssc = new StreamingContext(sc, Seconds(batchIntervalSeconds))
-    val filePath = "/home/cristiprg/Spark/data/iris-small-2D.csv"
-    val k = 2
-    val trainingDataStream = ssc.receiverStream(new CSVFileSource(1, filePath)).map(Vectors.parse)
-   // val trainingDataStream = ssc.socketTextStream("localhost", 9999).map(Vectors.parse)
+
+    //val k = 2
+    //val trainingDataStream = ssc.receiverStream(new CSVFileSource(10, filePath)).map(Vectors.parse)
+    //val trainingDataStream = ssc.socketTextStream("localhost", 9999).map(Vectors.parse)
+    val trainingDataStream = ssc.textFileStream(filePath)
+      .flatMap(_.split("\n"))
+      .map('[' + _ + ']')
+      .map(Vectors.parse)
+    //inputStream.print()
+    //val trainingDataStream = inputStream.map(Vectors.parse)
+    //trainingDataStream.print()
 
     // Initialize the state, the centroids and n_i = 0, for all i
-    val initialState: Array[Vector] = Array(Vectors.dense(5.0, 5.0), Vectors.dense(4.5, 3.5),
-      Vectors.dense(5.5, 3.5), Vectors.dense(5.0, 2.5))
+    val initialState: Array[Vector] = Array(Vectors.dense(5.0, 5.0, 5.0, 5.0), Vectors.dense(4.5, 3.5,5.0, 5.0),
+      Vectors.dense(5.5, 3.5,5.0, 5.0), Vectors.dense(5.0, 2.5,5.0, 5.0))
     stateManager.setState(initialState)
     stateManager.setStateLocalVector("n", Vectors.dense(0, 0, 0, 0))
 
@@ -138,15 +147,15 @@ object SequentialKMeansGlobalState {
     // wordCountStateStream.print()
 
     // A snapshot of the state for the current batch. This dstream contains one entry per key.
-    /*val stateSnapshotStream = wordStream.stateSnapshots()
-    stateSnapshotStream.foreachRDD { rdd =>
-    //  //rdd.toDF("word", "count").registerTempTable("batch_word_count")
-      rdd.saveAsTextFile("/home/cristiprg/Spark/Output")
-    }
-  */
+//    val stateSnapshotStream = wordStream.stateSnapshots()
+//    stateSnapshotStream.foreachRDD { rdd =>
+//    //  //rdd.toDF("word", "count").registerTempTable("batch_word_count")
+//      rdd.saveAsTextFile("/home/cristiprg/Spark/Output")
+//    }
+
     ssc.remember(Minutes(1))  // To make sure data is not deleted by the time we query it interactively
 
-    ssc.checkpoint("/home/cristiprg/Spark/Checkpoint")
+    //ssc.checkpoint("/home/cristiprg/Spark/Checkpoint")
 
     println("Creating function called to create new StreamingContext")
     newContextCreated = true
@@ -185,6 +194,15 @@ object SequentialKMeansGlobalState {
   }
 
   def main(args: Array[String]): Unit ={
+
+    if (args.length != 1) {
+      println("Usage: <jar> inputPath")
+      System.exit(-1)
+    }
+
+    filePath = args(0)
+    print(filePath)
+
     // Stop any existing StreamingContext
     if (stopActiveContext) {
       StreamingContext.getActive.foreach { _.stop(stopSparkContext = false) }
@@ -201,10 +219,10 @@ object SequentialKMeansGlobalState {
     // Start the streaming context in the background.
     ssc.start()
 
-    sendJSONs()
+    //sendJSONs()
 
     // This is to ensure that we wait for some time before the background streaming job starts. This will put this cell on hold for 5 times the batchIntervalSeconds.
-    ssc.awaitTerminationOrTimeout(batchIntervalSeconds * 2 * 1000)
+    ssc.awaitTermination()
   }
 
 
