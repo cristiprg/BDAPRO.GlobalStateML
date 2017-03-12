@@ -17,52 +17,46 @@
 
 package org.apache.spark.mllib.clustering
 
-import de.tu_berlin.dima.bdapro.spark.global_state_api.StateManager
-import redis.clients.jedis.{JedisPoolConfig, JedisPool}
-
-import scala.collection.JavaConverters._
-
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
+import org.json4s.JsonDSL._
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+
+import scala.collection.JavaConverters._
+
+import de.tu_berlin.dima.bdapro.spark.global_state_api.StateManager
 
 /**
   * A clustering model for K-means. Each point belongs to the cluster with the closest center.
   */
 @Since("0.8.0")
 class KMeansModelGlobalState @Since("1.1.0")(
-                                              //@Since("1.0.0") var _clusterCenters: Array[Vector])
-                                              val pool: JedisPool)
+  @Since("1.0.0") val _clusterCenters: Array[Vector],
+  val stateManager: StateManager)
   extends Saveable with Serializable with PMMLExportable {
 
-  lazy val stateManager = new StateManager(pool)
-  var _clusterCenters: Array[Vector] = null
+  if (stateManager != null)
+    stateManager.setState(_clusterCenters)
 
+  /**
+    * Get state from Redis
+    */
   def clusterCenters: Array[Vector] = {
     stateManager.getStateArrayOfVectors()
-  }
-
-  def setClusterCenters(newClusterCenters: Array[Vector]) = {
-    //_clusterCenters = newClusterCenters
-    //_clusterCenters = Array(Vectors.dense(0, 0, 0, 0), Vectors.dense(0, 0, 0, 0))
-    stateManager.setState(newClusterCenters)
-    this
   }
 
   /**
     * A Java-friendly constructor that takes an Iterable of Vectors.
     */
-  //@Since("1.4.0")
-  //def this(centers: java.lang.Iterable[Vector]) = this(centers.asScala.toArray)
+  @Since("1.4.0")
+  def this(centers: java.lang.Iterable[Vector], stateManager: StateManager) = this(centers.asScala.toArray, stateManager)
 
   /**
     * Total number of clusters.
@@ -139,7 +133,7 @@ object KMeansModelGlobalState extends Loader[KMeansModelGlobalState] {
     private val thisFormatVersion = "1.0"
 
     private[clustering]
-    val thisClassName = "org.apache.spark.mllib.clustering.KMeansModel"
+    val thisClassName = "org.apache.spark.mllib.clustering.KMeansModelGlobalState"
 
     def save(sc: SparkContext, model: KMeansModelGlobalState, path: String): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
@@ -163,13 +157,7 @@ object KMeansModelGlobalState extends Loader[KMeansModelGlobalState] {
       Loader.checkSchema[Cluster](centroids.schema)
       val localCentroids = centroids.rdd.map(Cluster.apply).collect()
       assert(k == localCentroids.length)
-      //new KMeansModelGlobalState(localCentroids.sortBy(_.id).map(_.point))
-
-      // TODO
-      //val model = new KMeansModelGlobalState()
-      //model.setClusterCenters(localCentroids.sortBy(_.id).map(_.point))
-      //model
-      null
+      new KMeansModelGlobalState(localCentroids.sortBy(_.id).map(_.point), new StateManager()) // TODO: save address of Redis server
     }
   }
 }

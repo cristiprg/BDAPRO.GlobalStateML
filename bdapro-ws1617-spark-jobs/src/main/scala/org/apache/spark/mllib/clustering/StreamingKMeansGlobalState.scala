@@ -17,16 +17,16 @@
 
 package org.apache.spark.mllib.clustering
 
+import de.tu_berlin.dima.bdapro.spark.global_state_api.StateManager
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext._
 import org.apache.spark.internal.Logging
-import org.apache.spark.mllib.linalg.{Vectors, BLAS, Vector}
+import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaDStream}
+import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
-import redis.clients.jedis.JedisPool
 
 import scala.reflect.ClassTag
 
@@ -63,18 +63,18 @@ import scala.reflect.ClassTag
   * The definition remains the same whether the time unit is given
   * as batches or points.
   */
-class StreamingKMeansModelGlobalState(
-                                       //override val clusterCenters: Array[Vector],
-                                       override val pool: JedisPool,
-                                       val clusterWeights: Array[Double])
-  extends KMeansModelGlobalState(pool) with Logging{
-
+@Since("1.2.0")
+class StreamingKMeansGlobalStateModel @Since("1.2.0")(
+                                                       @Since("1.2.0") override val _clusterCenters: Array[Vector],
+                                                       @Since("1.2.0") val clusterWeights: Array[Double],
+                                                       override val stateManager: StateManager)
+  extends KMeansModelGlobalState(_clusterCenters, stateManager) with Logging {
 
   /**
-    * Perform a k-means update on a batch of data.
-    */
+   * Perform a k-means update on a batch of data.
+   */
   @Since("1.2.0")
-  def update(data: RDD[Vector], decayFactor: Double, timeUnit: String): StreamingKMeansModelGlobalState = {
+  def update(data: RDD[Vector], decayFactor: Double, timeUnit: String): StreamingKMeansGlobalStateModel = {
 
     // find nearest cluster to each point
     val closest = data.map(point => (this.predict(point), (point, 1L)))
@@ -84,7 +84,6 @@ class StreamingKMeansModelGlobalState(
       BLAS.axpy(1.0, p2._1, p1._1)
       (p1._1, p1._2 + p2._2)
     }
-
     val dim = clusterCenters(0).size
 
     val pointStats: Array[(Int, (Vector, Long))] = closest
@@ -104,6 +103,8 @@ class StreamingKMeansModelGlobalState(
     BLAS.scal(discount, Vectors.dense(clusterWeights))
 
     // implement update rule
+    var newCenters = clusterCenters
+
     pointStats.foreach { case (label, (sum, count)) =>
       val centroid = clusterCenters(label)
 
@@ -120,6 +121,7 @@ class StreamingKMeansModelGlobalState(
         case _ => centroid.toArray.mkString("[", ",", "]")
       }
 
+      newCenters(label) = centroid
       logInfo(s"Cluster $label updated with weight $updatedWeight and centroid: $display")
     }
 
@@ -144,7 +146,7 @@ class StreamingKMeansModelGlobalState(
       }
     }
 
-    setClusterCenters(clusterCenters)
+    stateManager.setState(newCenters)
     this
   }
 }
@@ -167,16 +169,25 @@ class StreamingKMeansModelGlobalState(
   * }}}
   */
 @Since("1.2.0")
-class StreamingKMeansGlobalState(
-                                  @Since("1.2.0") var k: Int,
-                                  @Since("1.2.0") var decayFactor: Double,
-                                  @Since("1.2.0") var timeUnit: String,
-                                  val pool: JedisPool) extends Logging with Serializable {
+class StreamingKMeansGlobalState @Since("1.2.0")(
+    @Since("1.2.0") var k: Int,
+    @Since("1.2.0") var decayFactor: Double,
+    @Since("1.2.0") var timeUnit: String,
+    var stateManager: StateManager) extends Logging with Serializable {
 
   @Since("1.2.0")
-  def this(pool: JedisPool) = this(2, 1.0, StreamingKMeansGlobalState.BATCHES, pool)
+  def this() = this(2, 1.0, StreamingKMeansGlobalState.BATCHES, new StateManager())
 
-  protected var model: StreamingKMeansModelGlobalState = new StreamingKMeansModelGlobalState(pool, null)
+  protected var model: StreamingKMeansGlobalStateModel = new StreamingKMeansGlobalStateModel(null, null, null)
+
+
+  /**
+    * Set a specific StateManager
+    */
+  def setStateManager(stateManager: StateManager): this.type = {
+    this.stateManager = stateManager
+    this
+  }
 
   /**
     * Set the number of clusters.
@@ -229,11 +240,7 @@ class StreamingKMeansGlobalState(
       s"Number of initial centers must be ${k} but got ${centers.size}")
     require(weights.forall(_ >= 0),
       s"Weight for each inital center must be nonnegative but got [${weights.mkString(" ")}]")
-    //model = new StreamingKMeansModelGlobalState(centers, weights)
-    model = new StreamingKMeansModelGlobalState(pool, weights)
-      .setClusterCenters(centers)
-      .asInstanceOf[StreamingKMeansModelGlobalState]
-
+    model = new StreamingKMeansGlobalStateModel(centers, weights, stateManager)
     this
   }
 
@@ -253,10 +260,7 @@ class StreamingKMeansGlobalState(
     val random = new XORShiftRandom(seed)
     val centers = Array.fill(k)(Vectors.dense(Array.fill(dim)(random.nextGaussian())))
     val weights = Array.fill(k)(weight)
-    //model = new StreamingKMeansModelGlobalState(centers, weights)
-    model = new StreamingKMeansModelGlobalState(pool, weights)
-      .setClusterCenters(centers)
-      .asInstanceOf[StreamingKMeansModelGlobalState]
+    model = new StreamingKMeansGlobalStateModel(centers, weights, stateManager)
     this
   }
 
@@ -264,7 +268,7 @@ class StreamingKMeansGlobalState(
     * Return the latest model.
     */
   @Since("1.2.0")
-  def latestModel(): StreamingKMeansModelGlobalState = {
+  def latestModel(): StreamingKMeansGlobalStateModel = {
     model
   }
 
@@ -328,7 +332,7 @@ class StreamingKMeansGlobalState(
     */
   @Since("1.4.0")
   def predictOnValues[K](
-                          data: JavaPairDStream[K, Vector]): JavaPairDStream[K, java.lang.Integer] = {
+      data: JavaPairDStream[K, Vector]): JavaPairDStream[K, java.lang.Integer] = {
     implicit val tag = fakeClassTag[K]
     JavaPairDStream.fromPairDStream(
       predictOnValues(data.dstream).asInstanceOf[DStream[(K, java.lang.Integer)]])
