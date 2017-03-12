@@ -2,8 +2,8 @@ package de.tu_berlin.dima.bdapro.spark.mlalg
 
 import de.tu_berlin.dima.bdapro.spark.mlalg.util.CSVFileSource
 import org.apache.spark.SparkConf
-import org.apache.spark.mllib.clustering.StreamingKMeans
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.clustering.{StreamingKMeans, StreamingKMeansGlobalState}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 /**
@@ -13,8 +13,8 @@ object StreamingKMeansSparkVersion {
 
   val batchIntervalSeconds = 1
   val monitoringIntervalSeconds = 1
-  val filePath = "/home/cristiprg/Spark/data/iris2.csv"
-  val numberOfClusters = 2
+  var filePath = ""
+  val numberOfClusters = 4
 
   // Global variable across threads
   var modelConfig: StreamingKMeans = null
@@ -26,16 +26,21 @@ object StreamingKMeansSparkVersion {
       .setMaster("local[*]")
 
     val ssc = new StreamingContext(conf, Seconds(batchIntervalSeconds))
+    val initialState: Array[Vector] = Array(Vectors.dense(0.0, 0.0, 0.0, 0.0), Vectors.dense(1.0, 1.0, 1.0, 1.0),
+      Vectors.dense(2.0, 2.0, 2.0, 2.0), Vectors.dense(3.0, 3.0, 3.0, 3.0))
 
-    val trainingDataStream = ssc.receiverStream(new CSVFileSource(1000, filePath)).map(Vectors.parse)
+    val trainingDataStream = ssc.receiverStream(new CSVFileSource(100, "/home/cristiprg/Spark/iris6.csv" )).map(Vectors.parse)
+    //val trainingDataStream = ssc.textFileStream(filePath).flatMap(_.split("\n")).map('[' + _ + ']').map(Vectors.parse)
 
+    //trainingDataStream.print()
     modelConfig = new StreamingKMeans()
       .setK(numberOfClusters)
       .setDecayFactor(0.9)
-//      .setInitialCenters(Array(Vectors.dense(7.3,2.9,6.3,1.8), Vectors.dense(5.1,3.5,1.4,0.2)), Array(1, 1))
-      .setRandomCenters(4, 0)
+      .setInitialCenters(initialState, Array(1, 1, 1, 1))
+      //.setRandomCenters(4, 1)
 
     modelConfig.trainOn(trainingDataStream)
+
 
     //modelConfig.latestModel().clusterCenters.foreach(println)
     //modelConfig.predictOn(testDataStream).print()
@@ -44,6 +49,13 @@ object StreamingKMeansSparkVersion {
   }
 
   def main(args: Array[String]): Unit = {
+
+    if (args.length != 1) {
+      println("Usage: <jar> inputPath")
+      System.exit(-1)
+    }
+
+    filePath = args(0)
 
     // 1. Set up the monitoring thread
     new Thread("Cluster Centers Thread") {
