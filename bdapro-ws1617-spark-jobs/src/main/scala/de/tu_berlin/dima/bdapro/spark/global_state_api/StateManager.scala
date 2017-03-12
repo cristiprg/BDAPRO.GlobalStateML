@@ -16,7 +16,7 @@ import scala.collection.mutable.ArrayBuffer
   *
   * @param REDIS_SERVER_ADDRESS
   */
-class StateManager(val REDIS_SERVER_ADDRESS: String = "localhost") {
+class StateManager(val REDIS_SERVER_ADDRESS: String = "localhost") extends Serializable{
 
   //var jedis: Jedis = null
   lazy val nrRowsRedisKey: String = "nrRows"
@@ -140,6 +140,9 @@ class StateManager(val REDIS_SERVER_ADDRESS: String = "localhost") {
   }
 
   def setState(array: Array[Vector]): Unit = {
+    if (array.length == 0)
+      return
+
     var jedis: Jedis = null
     try {
       jedis = new Jedis(REDIS_SERVER_ADDRESS)
