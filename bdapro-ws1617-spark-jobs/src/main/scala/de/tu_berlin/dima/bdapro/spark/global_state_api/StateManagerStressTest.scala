@@ -33,9 +33,16 @@ object StateManagerStressTest{
 
   private def generateState(nrRows: Int, nrCols: Int) : Array[Vector] = {
     val array = new Array[Vector](nrRows)
+    val r = scala.util.Random
 
     for (i <- 0 until nrRows) {
-      array(i) = Vectors.zeros(nrCols)
+      val vectorArray = new Array[Double](nrCols)
+
+      for (j <- vectorArray.indices) {
+        vectorArray(j) = r.nextDouble() + 0.1
+      }
+
+      array(i) = Vectors.dense(vectorArray)
     }
 
     array
