@@ -79,9 +79,9 @@ object StateManagerStressTest{
 
   def main(args: Array[String]): Unit = {
 
-    val usage = "Usage: StateManagerStressTest <redis server> <nrRepetitions> <nrRows> <nrCols> <outputCsvFile>\n"
+    val usage = "Usage: StateManagerStressTest <redis server> <nrRepetitions> <nrRows> <nrCols> <outputCsvFile> <command>\n"
 
-    try { args(0); args(1).toInt; args(2).toInt; args(2).toInt; args(3)}
+    try { args(0); args(1).toInt; args(2).toInt; args(2).toInt; args(3); args(4); args(5)}
     catch { case _: Exception => println(usage); System.exit(1); }
 
     val redisServerAddress: String = args(0)
@@ -89,11 +89,24 @@ object StateManagerStressTest{
     val nrRows: Int = args(2).toInt
     val nrCols: Int = args(3).toInt
     val outputCsvFile: String = args(4)
+    val operation: String = args(5)
+
 
     val stateManager: StateManager = new StateManager(redisServerAddress)
     stateMatrix = generateState(nrRows, nrCols)
 
-    val result = timeWithStats(nrRepetitions) { stateManager.setState(stateMatrix) }
+    var result: TestResultType = null
+
+    operation match {
+      case "SAVE" =>
+        result = timeWithStats(nrRepetitions) { stateManager.setState(stateMatrix) }
+      case "LOAD" =>
+        stateManager.setState(stateMatrix)
+        result = timeWithStats(nrRepetitions) { stateManager.getStateArrayOfVectors() }
+      case whoa =>
+        println("Invalid operation: " + whoa)
+        System.exit(2)
+    }
 
     printResult(result)
     exportResultCSV(result, outputCsvFile)
