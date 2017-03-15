@@ -161,6 +161,8 @@ class StateManager(val REDIS_SERVER_ADDRESS: String = "localhost") extends Seria
       setLocalVector(i, x, pipeline)
       i += 1
     })
+    pipeline.sync()
+
   }
 
 
