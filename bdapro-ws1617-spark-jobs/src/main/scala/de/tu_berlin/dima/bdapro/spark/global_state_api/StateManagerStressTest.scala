@@ -18,6 +18,10 @@ object StateManagerStressTest{
     println(f"Stddev = ${result.stddev}%.3f")
   }
 
+  private def printResultSuccint(nrRows: Int, nrCols: Int, result: TestResultType): Unit = {
+    println(f"${nrRows}%d,${nrCols}%d,${result.mean}%.3f,${result.stddev}%.3f")
+  }
+
   private def exportResultCSV(result: TestResultType, filename: String): Unit = {
     val pw = new PrintWriter(new File(filename))
 
@@ -115,7 +119,8 @@ object StateManagerStressTest{
         System.exit(2)
     }
 
-    printResult(result)
+    //printResult(result)
+    printResultSuccint(nrRows, nrCols, result)
     exportResultCSV(result, outputCsvFile)
   }
 }
